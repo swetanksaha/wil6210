@@ -21,6 +21,7 @@
 static int wil_open(struct net_device *ndev)
 {
 	struct wil6210_priv *wil = ndev_to_wil(ndev);
+	int rc;
 
 	wil_dbg_misc(wil, "open\n");
 
@@ -30,16 +31,29 @@ static int wil_open(struct net_device *ndev)
 		return -EINVAL;
 	}
 
-	return wil_up(wil);
+	rc = wil_pm_runtime_get(wil);
+	if (rc < 0)
+		return rc;
+
+	rc = wil_up(wil);
+	if (rc)
+		wil_pm_runtime_put(wil);
+
+	return rc;
 }
 
 static int wil_stop(struct net_device *ndev)
 {
 	struct wil6210_priv *wil = ndev_to_wil(ndev);
+	int rc;
 
 	wil_dbg_misc(wil, "stop\n");
 
-	return wil_down(wil);
+	rc = wil_down(wil);
+	if (!rc)
+		wil_pm_runtime_put(wil);
+
+	return rc;
 }
 
 static const struct net_device_ops wil_netdev_ops = {
@@ -103,7 +117,7 @@ static int wil6210_netdev_poll_tx(struct napi_struct *napi, int budget)
 static void wil_dev_setup(struct net_device *dev)
 {
 	ether_setup(dev);
-	//dev->max_mtu = mtu_max;
+	dev->max_mtu = mtu_max;
 	dev->tx_queue_len = WIL_TX_Q_LEN_DEFAULT;
 }
 
@@ -136,7 +150,7 @@ void *wil_if_alloc(struct device *dev)
 	wdev->iftype = NL80211_IFTYPE_STATION; /* TODO */
 	/* default monitor channel */
 	ch = wdev->wiphy->bands[NL80211_BAND_60GHZ]->channels;
-	cfg80211_chandef_create(&wdev->preset_chandef, ch, NL80211_CHAN_NO_HT);
+	cfg80211_chandef_create(&wil->monitor_chandef, ch, NL80211_CHAN_NO_HT);
 
 	ndev = alloc_netdev(0, "wlan%d", NET_NAME_UNKNOWN, wil_dev_setup);
 	if (!ndev) {
@@ -204,7 +218,7 @@ int wil_if_add(struct wil6210_priv *wil)
 
 	netif_napi_add(ndev, &wil->napi_rx, wil6210_netdev_poll_rx,
 		       WIL6210_NAPI_BUDGET);
-	netif_napi_add(ndev, &wil->napi_tx, wil6210_netdev_poll_tx,
+	netif_tx_napi_add(ndev, &wil->napi_tx, wil6210_netdev_poll_tx,
 			  WIL6210_NAPI_BUDGET);
 
 	wil_update_net_queues_bh(wil, NULL, true);
