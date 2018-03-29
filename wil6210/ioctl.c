@@ -17,7 +17,8 @@
 #include <linux/uaccess.h>
 
 #include "wil6210.h"
-#include <uapi/linux/wil6210_uapi.h>
+//#include <uapi/linux/wil6210_uapi.h>
+#include "wil6210_uapi.h"
 
 #define wil_hex_dump_ioctl(prefix_str, buf, len) \
 	print_hex_dump_debug("DBG[IOC ]" prefix_str, \
@@ -161,20 +162,13 @@ out_free:
 
 int wil_ioctl(struct wil6210_priv *wil, void __user *data, int cmd)
 {
-	int ret;
-
 	switch (cmd) {
 	case WIL_IOCTL_MEMIO:
-		ret = wil_ioc_memio_dword(wil, data);
-		break;
+		return wil_ioc_memio_dword(wil, data);
 	case WIL_IOCTL_MEMIO_BLOCK:
-		ret = wil_ioc_memio_block(wil, data);
-		break;
+		return wil_ioc_memio_block(wil, data);
 	default:
 		wil_dbg_ioctl(wil, "Unsupported IOCTL 0x%04x\n", cmd);
 		return -ENOIOCTLCMD;
 	}
-
-	wil_dbg_ioctl(wil, "ioctl(0x%04x) -> %d\n", cmd, ret);
-	return ret;
 }
