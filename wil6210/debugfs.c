@@ -1339,6 +1339,10 @@ static int wil_bf_debugfs_show(struct seq_file *s, void *data)
 	for (i = 0; i < ARRAY_SIZE(wil->sta); i++) {
 		u32 status;
 
+        /* swetankk */
+        if (wil->sta[i].status != wil_sta_connected) continue;
+        /* swetankk:end */
+
 		cmd.cid = i;
 		rc = wmi_call(wil, WMI_NOTIFY_REQ_CMDID, vif->mid,
 			      &cmd, sizeof(cmd),
@@ -1471,6 +1475,10 @@ static int wil_link_debugfs_show(struct seq_file *s, void *data)
 		char *status = "unknown";
 		struct wil6210_vif *vif;
 		u8 mid;
+
+        /* swetankk */
+        if (wil->sta[i].status != wil_sta_connected) continue;
+        /* swetankk:end */
 
 		switch (p->status) {
 		case wil_sta_unused:
