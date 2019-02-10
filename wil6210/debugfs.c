@@ -998,6 +998,10 @@ static int wil_bf_debugfs_show(struct seq_file *s, void *data)
 	for (i = 0; i < ARRAY_SIZE(wil->sta); i++) {
 		u32 status;
 
+		/* swetankk */
+		if (wil->sta[i].status != wil_sta_connected) continue;
+		/* swetankk:end */
+
 		cmd.cid = i;
 		rc = wmi_call(wil, WMI_NOTIFY_REQ_CMDID, &cmd, sizeof(cmd),
 			      WMI_NOTIFY_REQ_DONE_EVENTID, &reply,
