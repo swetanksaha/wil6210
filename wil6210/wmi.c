@@ -32,6 +32,8 @@ module_param(agg_wsize, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(agg_wsize, " Window size for Tx Block Ack after connect;"
 		 " 0 - use default; < 0 - don't auto-establish");
 
+u32 disable_scan = 0;
+
 /**
  * WMI event receiving - theory of operations
  *

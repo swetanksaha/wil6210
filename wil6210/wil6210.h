@@ -31,6 +31,7 @@ extern int agg_wsize;
 extern u32 vring_idle_trsh;
 extern bool rx_align_2;
 extern bool debug_fw;
+extern u32 disable_scan;
 
 #define WIL_NAME "wil6210"
 #define WIL_FW_NAME "wil6210.fw" /* code */

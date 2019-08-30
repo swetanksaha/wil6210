@@ -1514,6 +1514,7 @@ static const struct dbg_off dbg_statics[] = {
 	{"mem_addr",	S_IRUGO | S_IWUSR, (ulong)&mem_addr, doff_u32},
 	{"vring_idle_trsh", S_IRUGO | S_IWUSR, (ulong)&vring_idle_trsh,
 	 doff_u32},
+    {"disable_scan",S_IRUGO | S_IWUSR, (ulong)&disable_scan, doff_u32},
 	{},
 };
 

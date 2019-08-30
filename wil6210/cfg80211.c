@@ -268,6 +268,8 @@ static int wil_cfg80211_scan(struct wiphy *wiphy,
 	uint i, n;
 	int rc;
 
+    if (disable_scan) return -EOPNOTSUPP;
+
 	if (wil->scan_request) {
 		wil_err(wil, "Already scanning\n");
 		return -EAGAIN;
