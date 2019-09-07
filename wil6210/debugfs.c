@@ -2423,6 +2423,121 @@ static const struct file_operations fops_compressed_rx_status = {
 	.llseek	= seq_lseek,
 };
 
+/*--------------- STATIC_SECTOR ---------------*/
+static ssize_t wil_write_static_sector(struct file *file,
+                    const char __user *buf,
+                    size_t len, loff_t *ppos)
+{
+	u32 cid, sector_index;
+	int rc;
+    struct wil6210_priv *wil = file->private_data;
+    struct wil6210_vif *vif = ndev_to_vif(wil->main_ndev);
+
+    struct wmi_set_selected_rf_sector_index_cmd cmd;
+	struct {
+		struct wmi_cmd_hdr wmi;
+		struct wmi_set_selected_rf_sector_index_done_event evt;
+    } __packed reply;
+
+    char *kbuf = kmalloc(len + 1, GFP_KERNEL);
+
+    if (!kbuf) 
+        return -ENOMEM;
+
+    rc = simple_write_to_buffer(kbuf, len, ppos, buf, len);
+    if (rc != len) {
+       kfree(kbuf); 
+        return rc >= 0 ? -EIO : rc;
+    }
+
+	kbuf[len] = '\0';
+    rc = sscanf(kbuf, "%u %u", &cid, &sector_index);
+
+    kfree(kbuf);
+
+    if (rc < 0) {
+        return rc;
+    }
+
+    if (rc < 2) {
+        return -EINVAL;
+    }
+
+	memset(&cmd, 0, sizeof(cmd));
+	cmd.sector_idx = cpu_to_le16((u16)sector_index);
+	cmd.sector_type = WMI_RF_SECTOR_TYPE_TX;
+	cmd.cid = (u8)cid;
+	memset(&reply, 0, sizeof(reply));
+	rc = wmi_call(wil, WMI_SET_SELECTED_RF_SECTOR_INDEX_CMDID, vif->mid,
+		      &cmd, sizeof(cmd),
+		      WMI_SET_SELECTED_RF_SECTOR_INDEX_DONE_EVENTID,
+		      &reply, sizeof(reply),
+		      500);
+
+    if (rc)
+		return rc;
+		
+	return len;
+}
+
+static ssize_t wil_read_static_sector(struct file *file, char __user *user_buf,
+                       size_t count, loff_t *ppos)
+{
+	uint i;
+	int rc;
+	struct wil6210_priv *wil = file->private_data;
+    struct wil6210_vif *vif = ndev_to_vif(wil->main_ndev);	
+
+	struct wmi_get_selected_rf_sector_index_cmd cmd;
+	struct {
+		struct wmi_cmd_hdr wmi;
+		struct wmi_get_selected_rf_sector_index_done_event evt;
+	} __packed reply;
+
+	u8 static_sector_idx[ARRAY_SIZE(wil->sta)] = {255, 255, 255, 255, 255, 255, 255, 255};
+	static char text[400];
+
+	for (i = 0; i < ARRAY_SIZE(wil->sta); i++) {
+		memset(&cmd, 0, sizeof(cmd));
+		cmd.cid = (u8)i;
+		cmd.sector_type = WMI_RF_SECTOR_TYPE_TX;
+		memset(&reply, 0, sizeof(reply));
+		rc = wmi_call(wil, WMI_GET_SELECTED_RF_SECTOR_INDEX_CMDID, vif->mid,
+		      &cmd, sizeof(cmd),
+		      WMI_GET_SELECTED_RF_SECTOR_INDEX_DONE_EVENTID,
+		      &reply, sizeof(reply),
+		      500);
+
+		if (rc) continue;
+
+		if (!reply.evt.status) {
+			static_sector_idx[i] = le16_to_cpu(reply.evt.sector_idx);
+		}	
+	}
+
+    snprintf(text, sizeof(text),
+         "To set sector for a client, write:\n"
+         "<CID> <sector_number>\n"
+         "Value:255 indicates NOT SET, in which case the internal BF algo. is controling the sector.\n"
+         "Current values are:\n%u %u %u %u %u %u %u %u\n",
+         static_sector_idx[0],
+         static_sector_idx[1],
+         static_sector_idx[2],
+         static_sector_idx[3],
+         static_sector_idx[4],
+         static_sector_idx[5],
+         static_sector_idx[6],
+         static_sector_idx[7]);
+
+    return simple_read_from_buffer(user_buf, count, ppos, text, sizeof(text));
+}
+
+static const struct file_operations fops_static_sector = {
+    .read  = wil_read_static_sector,
+    .write = wil_write_static_sector,
+    .open  = simple_open,
+};
+
 /*----------------*/
 static void wil6210_debugfs_init_blobs(struct wil6210_priv *wil,
 				       struct dentry *dbg)
@@ -2483,6 +2598,7 @@ static const struct {
 	{"tx_latency",	0644,		&fops_tx_latency},
 	{"link_stats",	0644,		&fops_link_stats},
 	{"link_stats_global",	0644,	&fops_link_stats_global},
+    {"static_sector",   0644,   &fops_static_sector}, 
 };
 
 static void wil6210_debugfs_init_files(struct wil6210_priv *wil,
