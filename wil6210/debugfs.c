@@ -2538,6 +2538,130 @@ static const struct file_operations fops_static_sector = {
     .open  = simple_open,
 };
 
+/*--------------- STATIC_MCS ---------------*/
+static ssize_t wil_write_static_mcs(struct file *file,
+                    const char __user *buf,
+                    size_t len, loff_t *ppos)
+{
+    u32 cid, enable, mcs;
+    uint i;
+    int rc;
+    struct wil6210_priv *wil = file->private_data;
+    struct wil6210_vif *vif = ndev_to_vif(wil->main_ndev);
+
+    struct wmi_rs_cfg_cmd cmd; 
+    struct {
+           struct wmi_cmd_hdr wmi;
+           struct wmi_rs_cfg_done_event evt;
+    } __packed reply;
+
+    char *kbuf = kmalloc(len + 1, GFP_KERNEL);
+
+    if (!kbuf)
+        return -ENOMEM;
+
+    rc = simple_write_to_buffer(kbuf, len, ppos, buf, len);
+    if (rc != len) {
+        kfree(kbuf);
+        return rc >= 0 ? -EIO : rc;
+    }
+
+    kbuf[len] = '\0';
+    rc = sscanf(kbuf, "%u %u %u", &cid, &enable, &mcs);
+
+    kfree(kbuf);
+
+    if (rc < 0)
+        return rc;
+
+    if (rc < 3)
+        return -EINVAL;
+
+    memset(&cmd, 0, sizeof(cmd));
+    cmd.cid = (u8)cid;
+    cmd.rs_enable = (u8)enable;
+    if (enable) {
+       for (i = 0; i < WMI_NUM_MCS; i++) {
+            cmd.rs_cfg.min_frame_cnt[i] = (u8)500;
+            cmd.rs_cfg.per_threshold[i] = 0;
+       }
+       cmd.rs_cfg.per_threshold[mcs] = 100;
+
+       cmd.rs_cfg.stop_th = 100;
+       cmd.rs_cfg.mcs1_fail_th = 0;
+       cmd.rs_cfg.dbg_disable_internal_trigger = 0;
+       cmd.rs_cfg.back_failure_mask = 0x00;
+       cmd.rs_cfg.max_back_failure_th = 0x20;
+       cmd.rs_cfg.mcs_en_vec = 0x01 << mcs;
+    }
+    rc = wmi_call(wil, WMI_RS_CFG_CMDID, vif->mid,
+                  &cmd, sizeof(cmd), 
+                  WMI_RS_CFG_DONE_EVENTID, 
+                  &reply, sizeof(reply),
+                  500);
+
+    if (rc) return rc;
+
+    return len;
+}
+
+static ssize_t wil_read_static_mcs(struct file *file, char __user *user_buf,                          size_t count, loff_t *ppos) 
+{
+    uint i;
+    int rc;
+    struct wil6210_priv *wil = file->private_data;
+    struct wil6210_vif *vif = ndev_to_vif(wil->main_ndev);
+
+    struct wmi_get_detailed_rs_res_cmd cmd;
+    struct {
+            struct wmi_cmd_hdr wmi;
+            struct wmi_get_detailed_rs_res_event evt;
+     } __packed reply;
+   
+     u8 mcs_info[ARRAY_SIZE(wil->sta)] = {255, 255, 255, 255, 255, 255, 255, 255};
+     static char text[400];
+
+     for (i = 0; i < ARRAY_SIZE(wil->sta); i++) {
+          memset(&cmd, 0, sizeof(cmd));
+          cmd.cid = (u8)i;
+          cmd.reserved[0] = (u8)0;
+          cmd.reserved[1] = (u8)0;
+          cmd.reserved[2] = (u8)0;
+          memset(&reply, 0, sizeof(reply));
+          rc = wmi_call(wil, WMI_GET_DETAILED_RS_RES_CMDID, vif->mid,
+               &cmd, sizeof(cmd),
+               WMI_GET_DETAILED_RS_RES_EVENTID,
+               &reply, sizeof(reply),
+               500);
+
+          if (rc) continue;
+  
+          if (!reply.evt.status) {
+              mcs_info[i] = reply.evt.rs_results.mcs;
+          }
+    }
+
+    snprintf(text, sizeof(text),
+         "To set MCS for a client, write:\n"
+         "<CID> <MCS>\n"
+         "Value:255 indicates NOT VALID.\n"
+         "Current default rate search values are:\n%u %u %u %u %u %u %u %u\n",          mcs_info[0],
+         mcs_info[1],
+         mcs_info[2],
+         mcs_info[3],
+         mcs_info[4],
+         mcs_info[5],
+         mcs_info[6],
+         mcs_info[7]);
+
+    return simple_read_from_buffer(user_buf, count, ppos, text, sizeof(text)); }
+
+static const struct file_operations fops_static_mcs = {  
+    .read = wil_read_static_mcs,
+    .write = wil_write_static_mcs,
+    .open  = simple_open,
+};
+
 /*----------------*/
 static void wil6210_debugfs_init_blobs(struct wil6210_priv *wil,
 				       struct dentry *dbg)
@@ -2599,6 +2723,7 @@ static const struct {
 	{"link_stats",	0644,		&fops_link_stats},
 	{"link_stats_global",	0644,	&fops_link_stats_global},
     {"static_sector",   0644,   &fops_static_sector}, 
+    {"static_mcs",      0644,   &fops_static_mcs},
 };
 
 static void wil6210_debugfs_init_files(struct wil6210_priv *wil,
